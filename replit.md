@@ -107,4 +107,81 @@ Preferred communication style: Simple, everyday language.
 
 **Mock Data**: Healthcare applications and API endpoints defined in `shared/mock-data.ts`.
 
-**Rationale**: Currently uses static mock data for demonstration. This structure allows easy replacement with real CDR application metadata from a configuration service or database.
+**Rationale**: Most applications use static mock data for demonstration. However, the CAEL application features real GitHub Actions integration (see CAEL Integration section below).
+
+## CAEL GitHub Actions Integration
+
+### Overview
+
+The CAEL (Clinical Analytics Exchange Layer) application is the only application with real GitHub Actions integration, while all other applications use mock data. This hybrid approach allows demonstration of the full workflow with real performance testing for CAEL.
+
+### Architecture Decision
+
+**Separate Flow**: CAEL bypasses the standard wizard (Application → APIs → Configure → Review → Results) and instead uses a dedicated flow:
+
+1. User selects CAEL application (flagged with `isRealIntegration: true`)
+2. GitHub token modal appears for authentication
+3. Workflow is triggered on GitHub Actions with hardcoded parameters
+4. User views real test results from GitHub Actions artifacts
+
+### Components
+
+**GitHubTokenModal** (`client/src/components/GitHubTokenModal.tsx`): 
+- Modal dialog for GitHub personal access token input
+- Validates token format (must start with `ghp_` or `github_pat_`)
+- Token is passed to backend API for workflow triggering
+- Token is stored in Replit secrets for security
+
+**CAELTestResults** (`client/src/components/CAELTestResults.tsx`):
+- Displays real K6 load test results from GitHub Actions artifacts
+- Shows workflow status (queued, in_progress, completed)
+- Manual "Refresh Results" button to fetch latest status and artifacts
+- Displays metrics from JSON artifacts: response times, error rates, throughput
+- Back button returns to dashboard
+
+**Dashboard Flow** (`client/src/pages/Dashboard.tsx`):
+- Detects CAEL via `isRealIntegration` flag in `handleSelectApp`
+- Shows token modal instead of wizard for CAEL
+- Renders `CAELTestResults` component when workflow is triggered
+- Regular wizard flow remains unchanged for all other applications
+
+### Backend API Routes
+
+**POST `/api/github/trigger-workflow`**:
+- Accepts GitHub token from frontend
+- Triggers workflow dispatch on `github-actions-tests/k6-performance-test` repository
+- Hardcoded test parameters:
+  - `stage2_duration`: "30s"
+  - `stage2_target`: "10"
+  - `parallelism`: "2"
+  - `test_id`: timestamp-based unique ID
+  - `test_url`: "https://cael-dev.example.com/api/v1/patients"
+- Returns workflow `runId` and `runUrl` for tracking
+
+**GET `/api/github/workflow-status/:runId`**:
+- Fetches current status of GitHub Actions workflow run
+- Returns `status` (queued, in_progress, completed, etc.) and `conclusion` (success, failure, etc.)
+
+**GET `/api/github/workflow-artifacts/:runId`**:
+- Lists all artifacts from completed workflow run
+- Returns array of artifacts with download URLs
+- Frontend fetches and parses JSON artifacts containing K6 metrics
+
+### Security
+
+- GitHub tokens are **never** stored in code or version control
+- Tokens are passed from user input to backend API
+- Backend uses token header: `Authorization: token ${githubToken}`
+- Token validation happens on both frontend (format check) and backend (GitHub API)
+- Replit secrets management can be used for production deployments
+
+### Testing
+
+The CAEL integration requires a valid GitHub personal access token with `repo` and `actions` permissions on the `github-actions-tests/k6-performance-test` repository. Without a valid token, the workflow trigger will fail gracefully with error toasts shown to the user.
+
+### Future Enhancements
+
+1. Automatic status polling instead of manual refresh
+2. Display artifact fetch failures to user (currently only logged)
+3. Support for custom test parameters instead of hardcoded values
+4. Unit/integration tests for GitHub API routes

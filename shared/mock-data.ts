@@ -6,6 +6,7 @@ export interface HealthcareApp {
   color: string;
   apiCount: number;
   isFavorite: boolean;
+  isRealIntegration?: boolean;
 }
 
 export interface ApiEndpoint {
@@ -81,6 +82,16 @@ export const healthcareApps: HealthcareApp[] = [
     apiCount: 21,
     isFavorite: true,
   },
+  {
+    id: 'cael',
+    name: 'CAEL',
+    description: 'Real-time load testing integration with GitHub Actions workflow',
+    icon: 'GitBranch',
+    color: 'indigo',
+    apiCount: 1,
+    isFavorite: true,
+    isRealIntegration: true,
+  },
 ];
 
 export const apiEndpointsByApp: Record<string, ApiEndpoint[]> = {
@@ -147,6 +158,16 @@ export const apiEndpointsByApp: Record<string, ApiEndpoint[]> = {
       path: '/api/v1/patients/{id}',
       category: 'Patient Data',
       description: 'Remove patient records (GDPR compliance)',
+      estimatedResponseTime: '~200ms',
+    },
+  ],
+  'cael': [
+    {
+      id: 'ep-cael-1',
+      method: 'GET',
+      path: '/persons/033944599299665$/visits',
+      category: 'Visits',
+      description: 'Retrieve patient visit information from CDR Clinical API',
       estimatedResponseTime: '~200ms',
     },
   ],

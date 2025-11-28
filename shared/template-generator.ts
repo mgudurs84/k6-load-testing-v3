@@ -88,9 +88,10 @@ function getFieldDescriptions(schema: OpenApiSchema): Record<string, string> {
 export function generatePayloadTemplate(
   appId: string,
   apiPath: string,
-  method: string
+  method: string,
+  customSpec?: OpenApiSpec
 ): PayloadTemplate | null {
-  const spec = openApiSpecs[appId];
+  const spec = customSpec || openApiSpecs[appId];
   if (!spec) {
     return null;
   }
@@ -179,13 +180,14 @@ export function validatePayload(
   appId: string,
   apiPath: string,
   method: string,
-  payload: unknown[]
+  payload: unknown[],
+  customSpec?: OpenApiSpec
 ): ValidationResult {
   const errors: ValidationError[] = [];
   let validCount = 0;
   let invalidCount = 0;
   
-  const spec = openApiSpecs[appId];
+  const spec = customSpec || openApiSpecs[appId];
   if (!spec) {
     return {
       isValid: true,

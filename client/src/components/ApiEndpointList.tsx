@@ -4,15 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-
-interface ApiEndpoint {
-  id: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  path: string;
-  category: string;
-  description: string;
-  estimatedResponseTime: string;
-}
+import { ApiEndpoint } from '@shared/mock-data';
 
 interface ApiEndpointListProps {
   endpoints: ApiEndpoint[];
@@ -27,6 +19,9 @@ const methodColors: Record<string, string> = {
   POST: 'bg-method-post/10 text-method-post border-method-post/20',
   PUT: 'bg-method-put/10 text-method-put border-method-put/20',
   DELETE: 'bg-method-delete/10 text-method-delete border-method-delete/20',
+  PATCH: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  HEAD: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+  OPTIONS: 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
 };
 
 export function ApiEndpointList({

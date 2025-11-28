@@ -11,7 +11,7 @@ export interface HealthcareApp {
 
 export interface ApiEndpoint {
   id: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS';
   path: string;
   category: string;
   description: string;

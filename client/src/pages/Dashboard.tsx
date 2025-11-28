@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Layers, TrendingUp, Trophy } from 'lucide-react';
 import { Header } from '@/components/Header';
@@ -19,12 +19,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { healthcareApps, apiEndpointsByApp } from '@shared/mock-data';
+import { useAdminApps } from '@/contexts/AdminAppsContext';
+import { healthcareApps, apiEndpointsByApp, HealthcareApp, ApiEndpoint } from '@shared/mock-data';
 
 type WizardStep = 'dashboard' | 'application' | 'apis' | 'payload' | 'configure' | 'review' | 'results';
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const { adminApps } = useAdminApps();
   const [currentStep, setCurrentStep] = useState<WizardStep>('dashboard');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [selectedApiIds, setSelectedApiIds] = useState<string[]>([]);
@@ -36,7 +38,6 @@ export default function Dashboard() {
     responseTimeThreshold: undefined as number | undefined,
     errorRateThreshold: undefined as number | undefined,
   });
-  const [apps, setApps] = useState(healthcareApps);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -51,11 +52,56 @@ export default function Dashboard() {
     githubToken: string;
   } | null>(null);
 
-  const selectedApp = apps.find((app) => app.id === selectedAppId);
-  const availableApis = selectedAppId ? apiEndpointsByApp[selectedAppId] || [] : [];
-  const selectedApis = availableApis.filter((api) => selectedApiIds.includes(api.id));
+  const allApps = useMemo(() => {
+    const adminAppList: HealthcareApp[] = adminApps.map(({ app }) => ({
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      icon: app.icon,
+      color: app.color,
+      apiCount: app.apiCount,
+      isFavorite: app.isFavorite,
+      isAdminConfigured: true,
+    } as HealthcareApp & { isAdminConfigured?: boolean }));
+    return [...healthcareApps, ...adminAppList];
+  }, [adminApps]);
 
-  const filteredApps = apps.filter((app) => {
+  const combinedApiEndpoints = useMemo(() => {
+    const combined: Record<string, ApiEndpoint[]> = { ...apiEndpointsByApp };
+    adminApps.forEach(({ app, apis }) => {
+      combined[app.id] = apis;
+    });
+    return combined;
+  }, [adminApps]);
+
+  const [apps, setApps] = useState(healthcareApps);
+  
+  const mergedApps = useMemo(() => {
+    const adminAppIds = new Set(adminApps.map(({ app }) => app.id));
+    const builtInApps = apps.filter(app => !adminAppIds.has(app.id));
+    const adminAppList = adminApps.map(({ app }) => ({
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      icon: app.icon,
+      color: app.color,
+      apiCount: app.apiCount,
+      isFavorite: app.isFavorite,
+    }));
+    return [...builtInApps, ...adminAppList];
+  }, [apps, adminApps]);
+
+  const selectedApp = mergedApps.find((app) => app.id === selectedAppId);
+  const availableApis = selectedAppId ? combinedApiEndpoints[selectedAppId] || [] : [];
+  const selectedApis = availableApis.filter((api) => selectedApiIds.includes(api.id));
+  
+  const selectedAppCustomSpec = useMemo(() => {
+    if (!selectedAppId) return undefined;
+    const adminApp = adminApps.find(({ app }) => app.id === selectedAppId);
+    return adminApp?.app.openApiSpec;
+  }, [selectedAppId, adminApps]);
+
+  const filteredApps = mergedApps.filter((app) => {
     const matchesSearch = app.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTab =
       activeTab === 'all' ||
@@ -416,6 +462,7 @@ export default function Dashboard() {
                   payloads={payloads}
                   onPayloadsChange={setPayloads}
                   appId={selectedApp.id}
+                  customSpec={selectedAppCustomSpec}
                 />
 
                 <div className="flex justify-between">

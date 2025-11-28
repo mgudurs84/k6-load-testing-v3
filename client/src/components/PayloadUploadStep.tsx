@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/tooltip';
 import { ApiEndpoint } from '@shared/mock-data';
 import { generatePayloadTemplate, validatePayload, generateTemplateJson } from '@shared/template-generator';
-import type { ValidationResult, PayloadTemplate } from '@shared/openapi-types';
+import type { ValidationResult, PayloadTemplate, OpenApiSpec } from '@shared/openapi-types';
 
 export interface PayloadFile {
   apiId: string;
@@ -33,6 +33,7 @@ interface PayloadUploadStepProps {
   payloads: PayloadFile[];
   onPayloadsChange: (payloads: PayloadFile[]) => void;
   appId: string;
+  customSpec?: OpenApiSpec;
 }
 
 export function PayloadUploadStep({
@@ -40,6 +41,7 @@ export function PayloadUploadStep({
   payloads,
   onPayloadsChange,
   appId,
+  customSpec,
 }: PayloadUploadStepProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [templateDialogApi, setTemplateDialogApi] = useState<ApiEndpoint | null>(null);
@@ -50,7 +52,7 @@ export function PayloadUploadStep({
   };
 
   const getTemplateForApi = (api: ApiEndpoint): PayloadTemplate | null => {
-    return generatePayloadTemplate(appId, api.path, api.method);
+    return generatePayloadTemplate(appId, api.path, api.method, customSpec);
   };
 
   const handleDownloadTemplate = (api: ApiEndpoint) => {
@@ -89,7 +91,7 @@ export function PayloadUploadStep({
           return;
         }
 
-        const validationResult = validatePayload(appId, api.path, api.method, dataArray);
+        const validationResult = validatePayload(appId, api.path, api.method, dataArray, customSpec);
 
         setErrors((prev) => {
           const newErrors = { ...prev };

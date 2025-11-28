@@ -52,6 +52,8 @@ export interface OpenApiPath {
   put?: OpenApiOperation;
   delete?: OpenApiOperation;
   patch?: OpenApiOperation;
+  head?: OpenApiOperation;
+  options?: OpenApiOperation;
 }
 
 export interface OpenApiSpec {

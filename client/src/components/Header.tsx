@@ -1,4 +1,4 @@
-import { Bell, Search, Home, History } from 'lucide-react';
+import { Bell, Search, Home, History, Settings } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,6 +38,17 @@ export function Header() {
             >
               <History className="h-4 w-4" />
               Test History
+            </Button>
+          </a>
+          <a href="/admin" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/admin'); window.dispatchEvent(new PopStateEvent('popstate')); }}>
+            <Button
+              variant={location === '/admin' ? 'default' : 'ghost'}
+              size="sm"
+              className="gap-2"
+              data-testid="button-nav-admin"
+            >
+              <Settings className="h-4 w-4" />
+              Admin
             </Button>
           </a>
         </nav>

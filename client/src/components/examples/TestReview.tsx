@@ -16,7 +16,7 @@ export default function TestReviewExample() {
 
   const mockConfig = {
     virtualUsers: 500,
-    rampUpTime: 5,
+    rampUpTime: 30,
     duration: 10,
     thinkTime: 3,
     responseTimeThreshold: 500,

@@ -32,7 +32,7 @@ export default function Dashboard() {
   const [selectedApiIds, setSelectedApiIds] = useState<string[]>([]);
   const [testConfig, setTestConfig] = useState({
     virtualUsers: 100,
-    rampUpTime: 5,
+    rampUpTime: 30,
     duration: 10,
     thinkTime: 3,
     responseTimeThreshold: undefined as number | undefined,
@@ -87,6 +87,7 @@ export default function Dashboard() {
       color: app.color,
       apiCount: app.apiCount,
       isFavorite: app.isFavorite,
+      isRealIntegration: false,
     }));
     return [...builtInApps, ...adminAppList];
   }, [apps, adminApps]);
@@ -193,16 +194,7 @@ export default function Dashboard() {
   };
 
   const handleSelectApp = (appId: string) => {
-    const app = apps.find((a) => a.id === appId);
-    
-    // Check if this is CAEL - show GitHub token modal instead of wizard
-    if (app?.isRealIntegration) {
-      setSelectedAppId(appId);
-      setShowGitHubTokenModal(true);
-      return;
-    }
-    
-    // Regular flow for mock applications
+    // All apps now use the full wizard flow (including CAEL)
     setSelectedAppId(appId);
     setSelectedApiIds([]);
     setCurrentStep('apis');
@@ -217,12 +209,30 @@ export default function Dashboard() {
     });
 
     try {
+      // Build the test plan from wizard configuration
+      const selectedApis = selectedApiIds
+        .map((id) => combinedApiEndpoints[selectedAppId || '']?.find((api) => api.id === id))
+        .filter(Boolean);
+      
+      // Build payloads object keyed by API ID
+      const payloadsMap: Record<string, any[]> = {};
+      payloads.forEach((p) => {
+        payloadsMap[p.apiId] = p.data;
+      });
+
+      const testPlan = {
+        selectedApis,
+        payloads: payloadsMap,
+        config: testConfig,
+        baseUrl: 'https://cdr-de-clinical-api.prod.aig.aetna.com',
+      };
+
       const response = await fetch('/api/github/trigger-workflow', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, testPlan }),
       });
 
       if (!response.ok) {
@@ -248,9 +258,6 @@ export default function Dashboard() {
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
-      
-      // Reset selection if failed
-      setSelectedAppId(null);
     }
   };
 
@@ -284,6 +291,13 @@ export default function Dashboard() {
   };
 
   const handleTriggerTest = () => {
+    // Check if this is CAEL (real integration) - show GitHub token modal
+    const app = mergedApps.find((a) => a.id === selectedAppId);
+    if (app?.isRealIntegration) {
+      setShowGitHubTokenModal(true);
+      return;
+    }
+    // Regular mock flow
     setShowSaveDialog(true);
   };
 
@@ -574,7 +588,7 @@ export default function Dashboard() {
                           setShowAIAnalysis(false);
                           setTestConfig({
                             virtualUsers: 100,
-                            rampUpTime: 5,
+                            rampUpTime: 30,
                             duration: 10,
                             thinkTime: 3,
                             responseTimeThreshold: undefined,
@@ -603,7 +617,7 @@ export default function Dashboard() {
                         setShowAIAnalysis(false);
                         setTestConfig({
                           virtualUsers: 100,
-                          rampUpTime: 5,
+                          rampUpTime: 30,
                           duration: 10,
                           thinkTime: 3,
                           responseTimeThreshold: undefined,

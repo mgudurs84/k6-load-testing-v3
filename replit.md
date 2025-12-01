@@ -48,3 +48,40 @@ Preferred communication style: Simple, everyday language.
 - **Lucide React**: Icon library.
 - **date-fns**: Date formatting and manipulation.
 - **Mock Data**: Static mock data for healthcare applications and API endpoints (`shared/mock-data.ts`).
+
+## K6 Script Generation
+
+### Overview
+CDR Pulse now supports dynamic K6 script generation based on wizard configuration. This allows users to either download K6 scripts for local execution or trigger tests via GitHub Actions with the full configuration.
+
+### Key Files
+- `shared/k6-generator.ts` - Utility functions for generating K6 scripts and workflow inputs
+- `docs/gha-workflow-template.yml` - GitHub Actions workflow template for users to copy
+
+### API Endpoints
+- **POST `/api/github/trigger-workflow`** - Triggers GitHub Actions with dynamic test configuration
+  - Accepts `testPlan` object with selectedApis, payloads, config, baseUrl
+  - Falls back to legacy hardcoded mode if no testPlan provided
+- **POST `/api/k6/generate-script`** - Generates downloadable K6 script
+- **GET `/api/k6/workflow-template`** - Returns GitHub Actions YAML template
+
+### Workflow Integration
+CAEL and other apps now use the full wizard flow. When triggering a test:
+1. User completes wizard (APIs, Payloads, Configure, Review)
+2. For CAEL: GitHub token modal appears, then workflow triggers with full config
+3. For other apps: Mock results are generated
+4. Users can download K6 scripts for any app via "Download K6 Script" button
+
+### Generated Script Features
+- Dynamic endpoint configuration from wizard selection
+- Payload injection from uploaded JSON files
+- Configurable stages (ramp-up, steady state, ramp-down)
+- Custom thresholds (response time, error rate)
+- Support for all HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+- Results exported as JSON for artifact collection
+
+### Time Unit Conventions
+- **Ramp-up Time**: In SECONDS (e.g., 30s, 120s, 300s)
+- **Test Duration**: In MINUTES (e.g., 5m, 10m, 30m)
+- **Presets**: Light=30s, Medium=120s (2m), Heavy=240s (4m), Stress=300s (5m)
+- **Default**: 30 seconds ramp-up, 10 minutes duration

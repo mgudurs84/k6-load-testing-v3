@@ -129,9 +129,9 @@ export function TestConfiguration({ config, onChange }: TestConfigurationProps) 
                       className="w-20"
                       data-testid="input-ramp-up"
                     />
-                    <span className="text-sm text-muted-foreground">minutes</span>
+                    <span className="text-sm text-muted-foreground">seconds</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Time to gradually increase to target user count</p>
+                  <p className="text-xs text-muted-foreground">Time to gradually increase to target user count (e.g., 30s, 120s, 300s)</p>
                 </div>
 
                 <div className="space-y-2">

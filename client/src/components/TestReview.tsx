@@ -1,9 +1,10 @@
-import { ChevronDown, ChevronUp, Copy, Rocket, FileJson, Check, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Rocket, FileJson, Check, AlertCircle, Download, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import * as LucideIcons from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface PayloadFile {
   apiId: string;
@@ -18,11 +19,14 @@ interface TestReviewProps {
     name: string;
     icon: string;
     color: string;
+    isRealIntegration?: boolean;
   };
   selectedApis: Array<{
     id: string;
     method: string;
     path: string;
+    description?: string;
+    category?: string;
   }>;
   config: {
     virtualUsers: number;
@@ -49,11 +53,64 @@ const colorClasses: Record<string, string> = {
 };
 
 export function TestReview({ application, selectedApis, config, payloads = [], onTrigger, onBack }: TestReviewProps) {
+  const { toast } = useToast();
   const [apisExpanded, setApisExpanded] = useState(false);
   const [payloadsExpanded, setPayloadsExpanded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const Icon = (LucideIcons as any)[application.icon] || LucideIcons.Box;
   
   const getPayloadForApi = (apiId: string) => payloads.find(p => p.apiId === apiId);
+  
+  const handleDownloadK6Script = async () => {
+    setIsDownloading(true);
+    try {
+      const payloadsMap: Record<string, any[]> = {};
+      payloads.forEach((p) => {
+        payloadsMap[p.apiId] = p.data;
+      });
+
+      const response = await fetch('/api/k6/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          testPlan: {
+            selectedApis,
+            payloads: payloadsMap,
+            config,
+            baseUrl: 'https://cdr-de-clinical-api.prod.aig.aetna.com',
+          },
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate script');
+
+      const data = await response.json();
+      
+      // Create and download the file
+      const blob = new Blob([data.script], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `k6-test-${data.testId}.js`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'K6 script downloaded',
+        description: 'Run with: k6 run k6-test.js',
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to download script',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const payloadPreview = JSON.stringify(
     {
@@ -72,7 +129,7 @@ export function TestReview({ application, selectedApis, config, payloads = [], o
             startVUs: 0,
             stages: [
               {
-                duration: `${config.rampUpTime}m`,
+                duration: `${config.rampUpTime}s`,
                 target: config.virtualUsers,
               },
               {
@@ -242,7 +299,7 @@ export function TestReview({ application, selectedApis, config, payloads = [], o
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Ramp-up Time</p>
-            <p className="mt-1 text-3xl font-semibold text-chart-4" data-testid="text-review-rampup">{config.rampUpTime}m</p>
+            <p className="mt-1 text-3xl font-semibold text-chart-4" data-testid="text-review-rampup">{config.rampUpTime}s</p>
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Test Duration</p>
@@ -299,21 +356,45 @@ export function TestReview({ application, selectedApis, config, payloads = [], o
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-chart-2/5 p-6">
         <div className="flex items-center gap-4">
           <div className="rounded-full bg-primary/10 p-4">
-            <Rocket className="h-8 w-8 text-primary" />
+            {application.isRealIntegration ? (
+              <GitBranch className="h-8 w-8 text-primary" />
+            ) : (
+              <Rocket className="h-8 w-8 text-primary" />
+            )}
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold">Ready to Launch</h3>
             <p className="text-sm text-muted-foreground">
-              Your load test configuration is complete and ready to execute
+              {application.isRealIntegration 
+                ? 'Your test will run via GitHub Actions with real K6 execution'
+                : 'Your load test configuration is complete and ready to execute'}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            <Button 
+              variant="outline" 
+              onClick={handleDownloadK6Script}
+              disabled={isDownloading}
+              data-testid="button-download-k6"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isDownloading ? 'Generating...' : 'Download K6 Script'}
+            </Button>
             <Button variant="outline" onClick={onBack} data-testid="button-back">
               Back
             </Button>
             <Button onClick={onTrigger} size="lg" className="gap-2" data-testid="button-trigger-test">
-              <Rocket className="h-5 w-5" />
-              Trigger Load Test
+              {application.isRealIntegration ? (
+                <>
+                  <GitBranch className="h-5 w-5" />
+                  Run via GitHub Actions
+                </>
+              ) : (
+                <>
+                  <Rocket className="h-5 w-5" />
+                  Trigger Load Test
+                </>
+              )}
             </Button>
           </div>
         </div>

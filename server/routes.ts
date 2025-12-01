@@ -9,7 +9,7 @@ const mockTestConfigurations = [
     applicationId: "cdr-clinical",
     selectedApiIds: ["ep-1", "ep-2", "ep-3"],
     virtualUsers: 100,
-    rampUpTime: 5,
+    rampUpTime: 30,
     duration: 10,
     thinkTime: 3,
     responseTimeThreshold: 500,
@@ -165,26 +165,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(mockTestRuns[index]);
   });
 
-  // GitHub Actions Integration for CAEL
+  // GitHub Actions Integration - Dynamic K6 Script Generation
   app.post("/api/github/trigger-workflow", async (req, res) => {
-    const { token } = req.body;
+    const { 
+      token, 
+      testPlan,
+      legacyMode = false
+    } = req.body;
 
     if (!token) {
       return res.status(400).json({ error: "GitHub token is required" });
     }
 
     try {
-      // Hardcoded parameters from the screenshot
-      const workflowParams = {
-        ref: "master",
-        inputs: {
-          stage2_duration: "5m",
-          stage2_target: "100",
-          parallelism: "2",
-          test_id: `cael-test-${Date.now()}`,
-          test_url: "https://cdr-de-clinical-api.prod.aig.aetna.com/persons/033944599299665$/visits"
+      let workflowParams;
+
+      if (legacyMode || !testPlan) {
+        workflowParams = {
+          ref: "master",
+          inputs: {
+            stage2_duration: "5m",
+            stage2_target: "100",
+            parallelism: "2",
+            test_id: `cael-test-${Date.now()}`,
+            test_url: "https://cdr-de-clinical-api.prod.aig.aetna.com/persons/033944599299665$/visits"
+          }
+        };
+      } else {
+        const { selectedApis, payloads, config, baseUrl } = testPlan;
+        const testId = `test-${Date.now()}`;
+        
+        const endpointsForK6 = (selectedApis || []).map((api: any) => ({
+          id: api.id,
+          name: api.description || api.path,
+          method: api.method,
+          path: api.path,
+          category: api.category,
+        }));
+
+        const payloadsForK6: Record<string, any[]> = {};
+        for (const api of (selectedApis || [])) {
+          if (payloads && payloads[api.id] && payloads[api.id].length > 0) {
+            payloadsForK6[api.id] = payloads[api.id];
+          }
         }
-      };
+
+        workflowParams = {
+          ref: "master",
+          inputs: {
+            test_id: testId,
+            virtual_users: String(config?.virtualUsers || 100),
+            duration: `${config?.duration || 5}m`,
+            ramp_up: `${config?.rampUpTime || 30}s`,
+            ramp_down: '30s',
+            response_threshold_ms: String(config?.responseTimeThreshold || 500),
+            error_threshold_percent: String(config?.errorRateThreshold || 1),
+            endpoints_json: JSON.stringify(endpointsForK6),
+            payloads_base64: Buffer.from(JSON.stringify(payloadsForK6)).toString('base64'),
+            base_url: baseUrl || 'https://cdr-de-clinical-api.prod.aig.aetna.com'
+          }
+        };
+      }
 
       const response = await fetch(
         "https://api.github.com/repos/cvs-health-source-code/cdr-cis-test-image-promotion/actions/workflows/load-test.yml/dispatches",
@@ -207,7 +248,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Get recent workflow runs to find the one we just triggered
       const runsResponse = await fetch(
         "https://api.github.com/repos/cvs-health-source-code/cdr-cis-test-image-promotion/actions/workflows/load-test.yml/runs?per_page=1",
         {
@@ -227,6 +267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         runId: latestRun?.id,
         runUrl: latestRun?.html_url,
         testId: workflowParams.inputs.test_id,
+        workflowInputs: workflowParams.inputs,
       });
     } catch (error) {
       console.error("Error triggering workflow:", error);
@@ -235,6 +276,314 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: error instanceof Error ? error.message : "Unknown error" 
       });
     }
+  });
+  
+  // Generate K6 script for download
+  app.post("/api/k6/generate-script", async (req, res) => {
+    const { testPlan } = req.body;
+    
+    if (!testPlan) {
+      return res.status(400).json({ error: "Test plan is required" });
+    }
+    
+    try {
+      const { selectedApis, payloads, config, baseUrl } = testPlan;
+      
+      const endpointsJson = JSON.stringify(
+        (selectedApis || []).map((api: any) => ({
+          id: api.id,
+          name: api.description || api.path,
+          method: api.method,
+          path: api.path,
+        })),
+        null,
+        2
+      );
+
+      const payloadsJson = JSON.stringify(
+        Object.fromEntries(
+          (selectedApis || [])
+            .filter((api: any) => payloads && payloads[api.id]?.length > 0)
+            .map((api: any) => [api.id, payloads[api.id]])
+        ),
+        null,
+        2
+      );
+      
+      const script = `
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Counter, Rate, Trend } from 'k6/metrics';
+
+// Custom metrics
+const requestDuration = new Trend('request_duration');
+const requestErrors = new Rate('request_errors');
+const requestCount = new Counter('request_count');
+
+// Test configuration
+const BASE_URL = '${baseUrl || 'https://your-api-base-url.com'}';
+
+const ENDPOINTS = ${endpointsJson};
+
+const PAYLOADS = ${payloadsJson};
+
+export const options = {
+  stages: [
+    { duration: '${config?.rampUpTime || 30}s', target: ${config?.virtualUsers || 100} },
+    { duration: '${config?.duration || 5}m', target: ${config?.virtualUsers || 100} },
+    { duration: '30s', target: 0 },
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<${config?.responseTimeThreshold || 500}'],
+    http_req_failed: ['rate<${(config?.errorRateThreshold || 1) / 100}'],
+    request_errors: ['rate<${(config?.errorRateThreshold || 1) / 100}'],
+  },
+};
+
+function getRandomPayload(endpointId) {
+  const endpointPayloads = PAYLOADS[endpointId] || [];
+  if (endpointPayloads.length === 0) return null;
+  return endpointPayloads[Math.floor(Math.random() * endpointPayloads.length)];
+}
+
+function makeRequest(endpoint) {
+  const url = BASE_URL + endpoint.path;
+  const method = endpoint.method.toUpperCase();
+  const headers = { 'Content-Type': 'application/json' };
+  const payload = getRandomPayload(endpoint.id);
+  
+  let response;
+  const startTime = Date.now();
+  
+  try {
+    switch (method) {
+      case 'POST':
+        response = http.post(url, payload ? JSON.stringify(payload) : null, { headers });
+        break;
+      case 'PUT':
+        response = http.put(url, payload ? JSON.stringify(payload) : null, { headers });
+        break;
+      case 'PATCH':
+        response = http.patch(url, payload ? JSON.stringify(payload) : null, { headers });
+        break;
+      case 'DELETE':
+        response = http.del(url, { headers });
+        break;
+      case 'HEAD':
+        response = http.head(url, { headers });
+        break;
+      case 'OPTIONS':
+        response = http.options(url, { headers });
+        break;
+      default:
+        response = http.get(url, { headers });
+    }
+    
+    const duration = Date.now() - startTime;
+    requestDuration.add(duration);
+    requestCount.add(1);
+    
+    const success = response.status >= 200 && response.status < 400;
+    requestErrors.add(!success);
+    
+    check(response, {
+      [\`\${endpoint.name} status is 2xx/3xx\`]: (r) => r.status >= 200 && r.status < 400,
+      [\`\${endpoint.name} response time < ${config?.responseTimeThreshold || 500}ms\`]: () => duration < ${config?.responseTimeThreshold || 500},
+    });
+    
+    return response;
+  } catch (error) {
+    requestErrors.add(1);
+    console.error(\`Request to \${url} failed: \${error}\`);
+    return null;
+  }
+}
+
+export default function () {
+  // Test each endpoint
+  ENDPOINTS.forEach((endpoint) => {
+    makeRequest(endpoint);
+  });
+  
+  // Think time between iterations
+  sleep(${config?.thinkTime || 1});
+}
+
+export function handleSummary(data) {
+  return {
+    'results.json': JSON.stringify(data, null, 2),
+  };
+}
+`.trim();
+      
+      res.json({
+        script,
+        testId: `test-${Date.now()}`,
+        config: {
+          virtualUsers: config?.virtualUsers || 100,
+          duration: config?.duration || 5,
+          rampUpTime: config?.rampUpTime || 30,
+          endpoints: (selectedApis || []).length,
+        }
+      });
+    } catch (error) {
+      console.error("Error generating K6 script:", error);
+      res.status(500).json({ 
+        error: "Failed to generate K6 script", 
+        message: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+  
+  // Get GitHub Actions workflow YAML template
+  app.get("/api/k6/workflow-template", async (req, res) => {
+    const template = `name: CDR Pulse K6 Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_id:
+        description: 'Unique test identifier'
+        required: true
+        type: string
+      virtual_users:
+        description: 'Target number of virtual users'
+        required: true
+        default: '100'
+      duration:
+        description: 'Test duration (e.g., 5m, 30s)'
+        required: true
+        default: '5m'
+      ramp_up:
+        description: 'Ramp-up time (e.g., 30s, 1m)'
+        required: true
+        default: '30s'
+      ramp_down:
+        description: 'Ramp-down time'
+        required: false
+        default: '30s'
+      response_threshold_ms:
+        description: 'Max p95 response time in ms'
+        required: true
+        default: '500'
+      error_threshold_percent:
+        description: 'Max error rate percentage'
+        required: true
+        default: '1'
+      endpoints_json:
+        description: 'JSON array of API endpoints to test'
+        required: true
+        type: string
+      payloads_base64:
+        description: 'Base64-encoded payload data'
+        required: false
+        type: string
+      base_url:
+        description: 'Base URL for API endpoints'
+        required: true
+        type: string
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Decode payloads
+        id: payloads
+        run: |
+          if [ -n "\${{ inputs.payloads_base64 }}" ]; then
+            echo "\${{ inputs.payloads_base64 }}" | base64 -d > payloads.json
+          else
+            echo "{}" > payloads.json
+          fi
+      
+      - name: Generate K6 Script
+        run: |
+          cat > k6-test.js << 'SCRIPT_EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          
+          const BASE_URL = '\${{ inputs.base_url }}';
+          const ENDPOINTS = \${{ inputs.endpoints_json }};
+          
+          let PAYLOADS = {};
+          try {
+            PAYLOADS = JSON.parse(open('./payloads.json'));
+          } catch (e) {}
+          
+          export const options = {
+            stages: [
+              { duration: '\${{ inputs.ramp_up }}', target: \${{ inputs.virtual_users }} },
+              { duration: '\${{ inputs.duration }}', target: \${{ inputs.virtual_users }} },
+              { duration: '\${{ inputs.ramp_down }}', target: 0 },
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<\${{ inputs.response_threshold_ms }}'],
+              http_req_failed: ['rate<0.0\${{ inputs.error_threshold_percent }}'],
+            },
+          };
+          
+          function getRandomPayload(endpointId) {
+            const ep = PAYLOADS[endpointId] || [];
+            return ep.length > 0 ? ep[Math.floor(Math.random() * ep.length)] : null;
+          }
+          
+          export default function () {
+            ENDPOINTS.forEach((ep) => {
+              const url = BASE_URL + ep.path;
+              const method = ep.method.toUpperCase();
+              const headers = { 'Content-Type': 'application/json' };
+              const payload = getRandomPayload(ep.id);
+              
+              let res;
+              switch (method) {
+                case 'POST': res = http.post(url, payload ? JSON.stringify(payload) : null, { headers }); break;
+                case 'PUT': res = http.put(url, payload ? JSON.stringify(payload) : null, { headers }); break;
+                case 'PATCH': res = http.patch(url, payload ? JSON.stringify(payload) : null, { headers }); break;
+                case 'DELETE': res = http.del(url, { headers }); break;
+                default: res = http.get(url, { headers });
+              }
+              check(res, { 'status 2xx': (r) => r.status >= 200 && r.status < 300 });
+            });
+            sleep(1);
+          }
+          
+          export function handleSummary(data) {
+            return { 'results.json': JSON.stringify(data, null, 2) };
+          }
+          SCRIPT_EOF
+      
+      - name: Install K6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+      
+      - name: Run K6 Load Test
+        run: k6 run k6-test.js --out json=k6-output.json
+        continue-on-error: true
+      
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-\${{ inputs.test_id }}
+          path: |
+            results.json
+            k6-output.json
+          retention-days: 30
+`;
+    
+    res.json({ template });
   });
 
   app.get("/api/github/workflow-status/:runId", async (req, res) => {

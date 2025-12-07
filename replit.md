@@ -85,3 +85,37 @@ CAEL and other apps now use the full wizard flow. When triggering a test:
 - **Test Duration**: In MINUTES (e.g., 5m, 10m, 30m)
 - **Presets**: Light=30s, Medium=120s (2m), Heavy=240s (4m), Stress=300s (5m)
 - **Default**: 30 seconds ramp-up, 10 minutes duration
+
+## Pub/Sub Testing Feature
+
+### Overview
+CDR Pulse includes a Pub/Sub testing feature for load testing message publishing to Confluent Kafka and Google Pub/Sub platforms. This enables healthcare organizations to test their event-driven architectures and message throughput.
+
+### Key Files
+- `client/src/pages/PubSub.tsx` - Main Pub/Sub testing page with 3-step workflow
+- `server/routes.ts` - Backend API endpoints for Pub/Sub operations
+
+### Frontend Flow
+1. **Configuration Tab**: Select platform (Kafka/GCP), enter credentials, test connection, register topics
+2. **Messages Tab**: Compose messages manually or upload JSON files with bulk messages
+3. **Load Test Tab**: Configure virtual users, duration, message rate; generate K6 scripts or trigger tests
+
+### API Endpoints
+- **POST `/api/pubsub/kafka/test-connection`** - Tests Kafka connection with bootstrap servers and SASL credentials
+- **POST `/api/pubsub/gcp/test-connection`** - Tests GCP Pub/Sub connection with project ID and credentials JSON
+- **POST `/api/pubsub/topics`** - Registers a new topic (stored in-memory)
+- **GET `/api/pubsub/topics`** - Lists all registered topics
+- **DELETE `/api/pubsub/topics/:id`** - Removes a registered topic
+- **POST `/api/pubsub/kafka/send`** - Sends messages to Kafka topic
+- **POST `/api/pubsub/gcp/send`** - Sends messages to GCP Pub/Sub topic
+- **POST `/api/pubsub/k6/generate-script`** - Generates K6 load test script for Pub/Sub
+- **POST `/api/pubsub/trigger-loadtest`** - Triggers a Pub/Sub load test
+
+### Platform Configurations
+- **Kafka**: Bootstrap servers, API key/secret (SASL_SSL), topic name
+- **GCP Pub/Sub**: Project ID, credentials JSON file, topic name
+
+### Message Handling
+- Manual composition with key/value pairs
+- Bulk upload via JSON file (array of {key, value} objects)
+- Message queue with preview and delete capabilities

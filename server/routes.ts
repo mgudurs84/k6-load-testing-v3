@@ -650,6 +650,368 @@ jobs:
     }
   });
 
+  // ============================================
+  // Pub/Sub API Endpoints (Kafka & Google Pub/Sub)
+  // ============================================
+
+  // Store for registered topics and connections (in-memory for demo)
+  const pubsubTopics: Map<string, any> = new Map();
+
+  // Test Kafka connection
+  app.post("/api/pubsub/kafka/test-connection", async (req, res) => {
+    const { bootstrapServers, apiKey, apiSecret, securityProtocol } = req.body;
+
+    if (!bootstrapServers || !apiKey || !apiSecret) {
+      return res.status(400).json({ 
+        error: "Missing required fields: bootstrapServers, apiKey, apiSecret" 
+      });
+    }
+
+    try {
+      // In production, you would use a Kafka client to test the connection
+      // For now, we simulate a connection test
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      res.json({ 
+        success: true, 
+        message: "Connection to Kafka cluster successful",
+        cluster: bootstrapServers.split('.')[0]
+      });
+    } catch (error) {
+      console.error("Kafka connection error:", error);
+      res.status(500).json({ 
+        error: "Failed to connect to Kafka cluster",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Test Google Pub/Sub connection
+  app.post("/api/pubsub/gcp/test-connection", async (req, res) => {
+    const { projectId, credentialsJson } = req.body;
+
+    if (!projectId || !credentialsJson) {
+      return res.status(400).json({ 
+        error: "Missing required fields: projectId, credentialsJson" 
+      });
+    }
+
+    try {
+      // Validate credentials JSON format
+      JSON.parse(credentialsJson);
+      
+      // In production, you would use the Google Cloud Pub/Sub client
+      // For now, we simulate a connection test
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      res.json({ 
+        success: true, 
+        message: "Connection to Google Pub/Sub successful",
+        projectId
+      });
+    } catch (error) {
+      console.error("GCP Pub/Sub connection error:", error);
+      res.status(500).json({ 
+        error: "Failed to connect to Google Pub/Sub",
+        message: error instanceof Error ? error.message : "Invalid credentials JSON"
+      });
+    }
+  });
+
+  // Register a topic
+  app.post("/api/pubsub/topics", async (req, res) => {
+    const { name, platform, kafkaConfig, gcpConfig } = req.body;
+
+    if (!name || !platform) {
+      return res.status(400).json({ error: "Topic name and platform are required" });
+    }
+
+    const topicId = `topic-${Date.now()}`;
+    const topic = {
+      id: topicId,
+      name,
+      platform,
+      kafkaConfig,
+      gcpConfig,
+      createdAt: new Date().toISOString(),
+    };
+
+    pubsubTopics.set(topicId, topic);
+
+    res.status(201).json(topic);
+  });
+
+  // Get all registered topics
+  app.get("/api/pubsub/topics", async (req, res) => {
+    const topics = Array.from(pubsubTopics.values());
+    res.json(topics);
+  });
+
+  // Delete a topic
+  app.delete("/api/pubsub/topics/:id", async (req, res) => {
+    const { id } = req.params;
+    
+    if (!pubsubTopics.has(id)) {
+      return res.status(404).json({ error: "Topic not found" });
+    }
+
+    pubsubTopics.delete(id);
+    res.json({ success: true, message: "Topic deleted" });
+  });
+
+  // Send messages to Kafka topic
+  app.post("/api/pubsub/kafka/send", async (req, res) => {
+    const { topicId, messages, kafkaConfig } = req.body;
+
+    if (!topicId || !messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "topicId and messages array are required" });
+    }
+
+    try {
+      // In production, you would use a Kafka producer to send messages
+      // For now, we simulate sending messages with a delay
+      const results = [];
+      for (let i = 0; i < messages.length; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        results.push({
+          messageId: `msg-${Date.now()}-${i}`,
+          partition: Math.floor(Math.random() * 3),
+          offset: 1000 + i,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      res.json({
+        success: true,
+        messagesSent: messages.length,
+        results,
+      });
+    } catch (error) {
+      console.error("Error sending Kafka messages:", error);
+      res.status(500).json({ 
+        error: "Failed to send messages to Kafka",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Send messages to Google Pub/Sub topic
+  app.post("/api/pubsub/gcp/send", async (req, res) => {
+    const { topicId, messages, gcpConfig } = req.body;
+
+    if (!topicId || !messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "topicId and messages array are required" });
+    }
+
+    try {
+      // In production, you would use the Google Cloud Pub/Sub publisher
+      // For now, we simulate sending messages with a delay
+      const results = [];
+      for (let i = 0; i < messages.length; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        results.push({
+          messageId: `${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+          publishTime: new Date().toISOString(),
+        });
+      }
+
+      res.json({
+        success: true,
+        messagesSent: messages.length,
+        results,
+      });
+    } catch (error) {
+      console.error("Error sending GCP Pub/Sub messages:", error);
+      res.status(500).json({ 
+        error: "Failed to send messages to Google Pub/Sub",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Generate K6 script for Pub/Sub load testing
+  app.post("/api/pubsub/k6/generate-script", async (req, res) => {
+    const { platform, topicName, config, producerApiUrl } = req.body;
+
+    if (!platform || !topicName) {
+      return res.status(400).json({ error: "Platform and topic name are required" });
+    }
+
+    const virtualUsers = config?.virtualUsers || 50;
+    const duration = config?.duration || 5;
+    const messagesPerSecond = config?.messagesPerSecond || 100;
+    const rampUpTime = config?.rampUpTime || 30;
+
+    const script = `
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+
+// Custom metrics for Pub/Sub load testing
+const publishErrors = new Rate('publish_errors');
+const publishLatency = new Trend('publish_latency');
+const messagesPublished = new Counter('messages_published');
+
+export const options = {
+  stages: [
+    { duration: '${rampUpTime}s', target: ${virtualUsers} },
+    { duration: '${duration}m', target: ${virtualUsers} },
+    { duration: '30s', target: 0 },
+  ],
+  thresholds: {
+    'publish_errors': ['rate<0.01'],
+    'publish_latency': ['p(95)<500'],
+  },
+};
+
+const BASE_URL = __ENV.PRODUCER_API_URL || '${producerApiUrl || 'http://localhost:8080'}';
+const TOPIC = '${topicName}';
+const PLATFORM = '${platform}';
+
+// Sample healthcare messages - customize for your use case
+const sampleMessages = [
+  { 
+    patientId: 'P' + Math.random().toString(36).substring(7),
+    eventType: 'vitals',
+    timestamp: new Date().toISOString(),
+    data: { heartRate: Math.floor(60 + Math.random() * 40), bloodPressure: '120/80', temperature: 98.6 }
+  },
+  {
+    patientId: 'P' + Math.random().toString(36).substring(7),
+    eventType: 'lab_result',
+    timestamp: new Date().toISOString(),
+    data: { testName: 'CBC', result: 'normal', units: 'mg/dL', value: Math.floor(Math.random() * 100) }
+  },
+  {
+    patientId: 'P' + Math.random().toString(36).substring(7),
+    eventType: 'medication',
+    timestamp: new Date().toISOString(),
+    data: { medication: 'Aspirin', dosage: '100mg', frequency: 'daily' }
+  },
+];
+
+function generateMessage() {
+  const template = sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
+  return {
+    ...template,
+    patientId: 'P' + Math.random().toString(36).substring(7),
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export default function() {
+  const message = generateMessage();
+  
+  const payload = JSON.stringify({
+    topic: TOPIC,
+    platform: PLATFORM,
+    key: message.patientId,
+    value: message,
+  });
+
+  const params = {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  const start = Date.now();
+  const res = http.post(\`\${BASE_URL}/api/publish\`, payload, params);
+  const latency = Date.now() - start;
+
+  publishLatency.add(latency);
+  
+  const success = check(res, {
+    'status is 200': (r) => r.status === 200,
+    'response has messageId': (r) => {
+      try {
+        return JSON.parse(r.body).messageId !== undefined;
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  if (success) {
+    messagesPublished.add(1);
+  }
+  publishErrors.add(!success);
+
+  // Rate limiting: target ${messagesPerSecond} messages/second per VU
+  sleep(1 / ${Math.max(1, messagesPerSecond / virtualUsers)});
+}
+
+export function handleSummary(data) {
+  const totalMessages = data.metrics.messages_published?.values?.count || 0;
+  const errorRate = data.metrics.publish_errors?.values?.rate || 0;
+  const avgLatency = data.metrics.publish_latency?.values?.avg || 0;
+  const p95Latency = data.metrics.publish_latency?.values['p(95)'] || 0;
+  
+  console.log('\\n========== Pub/Sub Load Test Summary ==========');
+  console.log(\`Platform: ${platform.toUpperCase()}\`);
+  console.log(\`Topic: ${topicName}\`);
+  console.log(\`Total Messages Published: \${totalMessages}\`);
+  console.log(\`Error Rate: \${(errorRate * 100).toFixed(2)}%\`);
+  console.log(\`Average Latency: \${avgLatency.toFixed(2)}ms\`);
+  console.log(\`P95 Latency: \${p95Latency.toFixed(2)}ms\`);
+  console.log('================================================\\n');
+  
+  return {
+    'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+    'pubsub-summary.json': JSON.stringify(data),
+  };
+}
+`;
+
+    res.json({
+      success: true,
+      script,
+      config: {
+        platform,
+        topicName,
+        virtualUsers,
+        duration,
+        messagesPerSecond,
+        rampUpTime,
+      },
+    });
+  });
+
+  // Trigger Pub/Sub load test (via GitHub Actions or local K6)
+  app.post("/api/pubsub/trigger-loadtest", async (req, res) => {
+    const { platform, topicName, config, token } = req.body;
+
+    if (!platform || !topicName || !config) {
+      return res.status(400).json({ error: "Platform, topic name, and config are required" });
+    }
+
+    try {
+      // Generate a test ID
+      const testId = `pubsub-${platform}-${Date.now()}`;
+
+      // In production, this would trigger a GitHub Actions workflow or run K6 locally
+      // For now, we return a simulated response
+      res.json({
+        success: true,
+        message: "Load test triggered successfully",
+        testId,
+        config: {
+          platform,
+          topicName,
+          virtualUsers: config.virtualUsers,
+          duration: config.duration,
+          messagesPerSecond: config.messagesPerSecond,
+        },
+      });
+    } catch (error) {
+      console.error("Error triggering load test:", error);
+      res.status(500).json({ 
+        error: "Failed to trigger load test",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

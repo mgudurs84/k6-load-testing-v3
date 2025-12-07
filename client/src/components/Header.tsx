@@ -1,4 +1,4 @@
-import { Bell, Search, Home, History, Settings } from 'lucide-react';
+import { Bell, Search, Home, History, Settings, MessageSquare } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,6 +38,17 @@ export function Header() {
             >
               <History className="h-4 w-4" />
               Test History
+            </Button>
+          </a>
+          <a href="/pubsub" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/pubsub'); window.dispatchEvent(new PopStateEvent('popstate')); }}>
+            <Button
+              variant={location === '/pubsub' ? 'default' : 'ghost'}
+              size="sm"
+              className="gap-2"
+              data-testid="button-nav-pubsub"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Pub/Sub
             </Button>
           </a>
           <a href="/admin" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/admin'); window.dispatchEvent(new PopStateEvent('popstate')); }}>

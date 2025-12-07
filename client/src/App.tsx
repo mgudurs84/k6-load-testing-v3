@@ -7,6 +7,7 @@ import { AdminAppsProvider } from "@/contexts/AdminAppsContext";
 import Dashboard from "@/pages/Dashboard";
 import TestHistory from "@/pages/TestHistory";
 import Admin from "@/pages/Admin";
+import PubSub from "@/pages/PubSub";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -15,6 +16,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/history" component={TestHistory} />
       <Route path="/admin" component={Admin} />
+      <Route path="/pubsub" component={PubSub} />
       <Route component={NotFound} />
     </Switch>
   );

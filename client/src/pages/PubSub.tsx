@@ -640,6 +640,58 @@ export default function PubSub() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileJson className="h-4 w-4 text-chart-2" />
+                        <span className="font-medium text-sm">FHIR Sample Templates</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open('/samples/fhir-encounter-bundle.json', '_blank')}
+                          data-testid="button-sample-encounter"
+                        >
+                          <Download className="h-3 w-3" />
+                          Encounter
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open('/samples/fhir-lab-report-bundle.json', '_blank')}
+                          data-testid="button-sample-lab-report"
+                        >
+                          <Download className="h-3 w-3" />
+                          Lab Report (CBC)
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open('/samples/fhir-allergy-bundle.json', '_blank')}
+                          data-testid="button-sample-allergy"
+                        >
+                          <Download className="h-3 w-3" />
+                          Allergies
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open('/samples/fhir-bulk-messages.json', '_blank')}
+                          data-testid="button-sample-bulk"
+                        >
+                          <Download className="h-3 w-3" />
+                          Bulk Messages
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Download sample FHIR bundles to use as message templates
+                      </p>
+                    </div>
+                    
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Button
                         variant="outline"

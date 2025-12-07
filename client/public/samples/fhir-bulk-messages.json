@@ -1,0 +1,109 @@
+[
+  {
+    "key": "encounter-12345",
+    "value": {
+      "resourceType": "Bundle",
+      "type": "transaction",
+      "entry": [
+        {
+          "fullUrl": "urn:uuid:encounter-12345",
+          "resource": {
+            "resourceType": "Encounter",
+            "id": "encounter-12345",
+            "status": "in-progress",
+            "class": {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+              "code": "IMP",
+              "display": "inpatient encounter"
+            },
+            "subject": {
+              "reference": "Patient/patient-67890",
+              "display": "John Smith"
+            },
+            "period": {
+              "start": "2024-12-07T08:00:00Z"
+            }
+          },
+          "request": {
+            "method": "POST",
+            "url": "Encounter"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "key": "lab-cbc-001",
+    "value": {
+      "resourceType": "Bundle",
+      "type": "transaction",
+      "entry": [
+        {
+          "fullUrl": "urn:uuid:observation-hemoglobin",
+          "resource": {
+            "resourceType": "Observation",
+            "status": "final",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "718-7",
+                  "display": "Hemoglobin [Mass/volume] in Blood"
+                }
+              ]
+            },
+            "subject": {"reference": "Patient/patient-67890"},
+            "effectiveDateTime": "2024-12-07T10:30:00Z",
+            "valueQuantity": {
+              "value": 14.2,
+              "unit": "g/dL"
+            }
+          },
+          "request": {"method": "POST", "url": "Observation"}
+        }
+      ]
+    }
+  },
+  {
+    "key": "allergy-penicillin-001",
+    "value": {
+      "resourceType": "Bundle",
+      "type": "transaction",
+      "entry": [
+        {
+          "fullUrl": "urn:uuid:allergy-penicillin-001",
+          "resource": {
+            "resourceType": "AllergyIntolerance",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "type": "allergy",
+            "category": ["medication"],
+            "criticality": "high",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+                  "code": "7980",
+                  "display": "Penicillin G"
+                }
+              ]
+            },
+            "patient": {
+              "reference": "Patient/patient-67890"
+            }
+          },
+          "request": {
+            "method": "POST",
+            "url": "AllergyIntolerance"
+          }
+        }
+      ]
+    }
+  }
+]

@@ -36,6 +36,12 @@ import {
   Copy,
   Lock,
   Unlock,
+  History,
+  ChevronDown,
+  ChevronRight,
+  XCircle,
+  Hash,
+  Layers,
 } from 'lucide-react';
 import { SiApachekafka, SiGooglecloud } from 'react-icons/si';
 
@@ -65,13 +71,26 @@ interface Message {
   headers?: Record<string, string>;
 }
 
+interface SentMessageRecord {
+  id: string;
+  topicId: string;
+  topicName: string;
+  platform: Platform;
+  messages: { key?: string; preview: string }[];
+  messageCount: number;
+  sentAt: Date;
+  status: 'success' | 'failed';
+  partition?: number;
+  offset?: string;
+}
+
 export default function PubSub() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [platform, setPlatform] = useState<Platform>('kafka');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
-  const [activeSection, setActiveSection] = useState<'config' | 'messages' | 'loadtest'>('config');
+  const [activeSection, setActiveSection] = useState<'config' | 'messages' | 'loadtest' | 'history'>('config');
   
   const [kafkaConfig, setKafkaConfig] = useState({
     bootstrapServers: '',
@@ -103,6 +122,8 @@ export default function PubSub() {
   const [registeredTopics, setRegisteredTopics] = useState<TopicConfig[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<string>('');
   const [showSecrets, setShowSecrets] = useState(false);
+  const [sentMessageHistory, setSentMessageHistory] = useState<SentMessageRecord[]>([]);
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
 
   const handleTestConnection = async () => {
     setConnectionStatus('connecting');
@@ -295,6 +316,24 @@ export default function PubSub() {
       
       if (data.success) {
         setSendProgress(100);
+        
+        const record: SentMessageRecord = {
+          id: `record-${Date.now()}`,
+          topicId: selectedTopic,
+          topicName: topic.name,
+          platform: topic.platform,
+          messages: messages.map(m => ({
+            key: m.key,
+            preview: m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content,
+          })),
+          messageCount: messages.length,
+          sentAt: new Date(),
+          status: 'success',
+          partition: data.results?.[0]?.partition,
+          offset: data.results?.[0]?.offset,
+        };
+        setSentMessageHistory(prev => [record, ...prev]);
+        
         toast({
           title: "Messages Sent",
           description: `Successfully sent ${data.messagesSent} message(s) to the topic.`,
@@ -304,6 +343,24 @@ export default function PubSub() {
         throw new Error(data.error || 'Failed to send messages');
       }
     } catch (error) {
+      const topic = registeredTopics.find(t => t.id === selectedTopic);
+      if (topic && messages.length > 0) {
+        const failedRecord: SentMessageRecord = {
+          id: `record-${Date.now()}`,
+          topicId: selectedTopic,
+          topicName: topic.name,
+          platform: topic.platform,
+          messages: messages.map(m => ({
+            key: m.key,
+            preview: m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content,
+          })),
+          messageCount: messages.length,
+          sentAt: new Date(),
+          status: 'failed',
+        };
+        setSentMessageHistory(prev => [failedRecord, ...prev]);
+      }
+      
       toast({
         title: "Send Failed",
         description: error instanceof Error ? error.message : "Failed to send messages.",
@@ -438,6 +495,15 @@ export default function PubSub() {
                 <TabsTrigger value="loadtest" className="gap-2" data-testid="tab-loadtest">
                   <Zap className="h-4 w-4" />
                   Load Test
+                </TabsTrigger>
+                <TabsTrigger value="history" className="gap-2" data-testid="tab-history">
+                  <History className="h-4 w-4" />
+                  History
+                  {sentMessageHistory.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5">
+                      {sentMessageHistory.length}
+                    </Badge>
+                  )}
                 </TabsTrigger>
               </TabsList>
 
@@ -948,16 +1014,152 @@ export default function PubSub() {
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              <TabsContent value="history" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <History className="h-5 w-5 text-chart-1" />
+                          Message History
+                        </CardTitle>
+                        <CardDescription>
+                          View all messages sent to your topics
+                        </CardDescription>
+                      </div>
+                      {sentMessageHistory.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSentMessageHistory([])}
+                          className="gap-2"
+                          data-testid="button-clear-history"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Clear History
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {sentMessageHistory.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <History className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                        <p className="text-lg font-medium">No messages sent yet</p>
+                        <p className="text-sm mt-1">Messages you send will appear here</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {sentMessageHistory.map((record) => (
+                          <div
+                            key={record.id}
+                            className="rounded-lg border bg-card overflow-hidden"
+                            data-testid={`history-record-${record.id}`}
+                          >
+                            <div
+                              className="flex items-center gap-3 p-4 cursor-pointer hover-elevate"
+                              onClick={() => setExpandedRecord(expandedRecord === record.id ? null : record.id)}
+                            >
+                              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-gradient-to-br from-primary/10 to-chart-2/10 shrink-0">
+                                {record.platform === 'kafka' ? (
+                                  <SiApachekafka className="h-5 w-5 text-primary" />
+                                ) : (
+                                  <SiGooglecloud className="h-5 w-5 text-chart-2" />
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium">{record.topicName}</span>
+                                  <Badge 
+                                    variant={record.status === 'success' ? 'default' : 'destructive'}
+                                    className="gap-1"
+                                  >
+                                    {record.status === 'success' ? (
+                                      <CheckCircle2 className="h-3 w-3" />
+                                    ) : (
+                                      <XCircle className="h-3 w-3" />
+                                    )}
+                                    {record.status === 'success' ? 'Sent' : 'Failed'}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                  <span className="flex items-center gap-1">
+                                    <Layers className="h-3 w-3" />
+                                    {record.messageCount} message{record.messageCount !== 1 ? 's' : ''}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {new Date(record.sentAt).toLocaleTimeString()}
+                                  </span>
+                                  {record.partition !== undefined && (
+                                    <span className="flex items-center gap-1">
+                                      <Hash className="h-3 w-3" />
+                                      P{record.partition}
+                                    </span>
+                                  )}
+                                  {record.offset && (
+                                    <span className="text-xs font-mono">
+                                      Offset: {record.offset}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <Button variant="ghost" size="icon" className="shrink-0">
+                                {expandedRecord === record.id ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            
+                            {expandedRecord === record.id && (
+                              <div className="border-t bg-muted/30 p-4">
+                                <div className="text-xs font-medium text-muted-foreground mb-2">
+                                  Message Previews
+                                </div>
+                                <div className="space-y-2 max-h-64 overflow-auto">
+                                  {record.messages.map((msg, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="rounded-md bg-background border p-3"
+                                    >
+                                      {msg.key && (
+                                        <div className="text-xs text-muted-foreground mb-1">
+                                          <span className="font-medium">Key:</span> {msg.key}
+                                        </div>
+                                      )}
+                                      <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
+                                        {msg.preview}
+                                      </pre>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
             </Tabs>
           </div>
 
           <div className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <Server className="h-5 w-5" />
+                  <Server className="h-5 w-5 text-chart-1" />
                   Registered Topics
                 </CardTitle>
+                <CardDescription>
+                  Topics configured for message publishing
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {registeredTopics.length === 0 ? (
@@ -1059,6 +1261,13 @@ export default function PubSub() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Queued Messages</span>
                   <Badge variant="outline">{messages.length}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Messages Sent</span>
+                  <Badge variant="outline" className="gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {sentMessageHistory.filter(r => r.status === 'success').reduce((sum, r) => sum + r.messageCount, 0)}
+                  </Badge>
                 </div>
               </CardContent>
             </Card>

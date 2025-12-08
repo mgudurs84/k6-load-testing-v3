@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { Kafka, logLevel } from "kafkajs";
 
 // Mock data for test configurations and runs
 const mockTestConfigurations = [
@@ -668,14 +669,35 @@ jobs:
     }
 
     try {
-      // In production, you would use a Kafka client to test the connection
-      // For now, we simulate a connection test
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Create Kafka client with SASL/SSL for Confluent Cloud
+      const kafka = new Kafka({
+        clientId: 'cdr-pulse-connection-test',
+        brokers: [bootstrapServers],
+        ssl: true,
+        sasl: {
+          mechanism: 'plain',
+          username: apiKey,
+          password: apiSecret,
+        },
+        logLevel: logLevel.ERROR,
+        connectionTimeout: 10000,
+      });
+
+      // Create admin client to test connection
+      const admin = kafka.admin();
+      await admin.connect();
+      
+      // Fetch cluster info to verify connection
+      const clusterInfo = await admin.describeCluster();
+      await admin.disconnect();
+
+      console.log(`Successfully connected to Kafka cluster: ${clusterInfo.clusterId}`);
       
       res.json({ 
         success: true, 
         message: "Connection to Kafka cluster successful",
-        cluster: bootstrapServers.split('.')[0]
+        cluster: clusterInfo.clusterId,
+        brokers: clusterInfo.brokers.length
       });
     } catch (error) {
       console.error("Kafka connection error:", error);
@@ -767,19 +789,60 @@ jobs:
       return res.status(400).json({ error: "topicId and messages array are required" });
     }
 
+    if (!kafkaConfig?.bootstrapServers || !kafkaConfig?.apiKey || !kafkaConfig?.apiSecret) {
+      return res.status(400).json({ error: "Kafka configuration with bootstrapServers, apiKey, and apiSecret is required" });
+    }
+
+    // Get topic name from registered topics
+    const topic = pubsubTopics.get(topicId);
+    if (!topic) {
+      return res.status(404).json({ error: "Topic not found. Please register the topic first." });
+    }
+
     try {
-      // In production, you would use a Kafka producer to send messages
-      // For now, we simulate sending messages with a delay
-      const results = [];
-      for (let i = 0; i < messages.length; i++) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        results.push({
+      // Create Kafka client with SASL/SSL for Confluent Cloud
+      const kafka = new Kafka({
+        clientId: 'cdr-pulse-producer',
+        brokers: [kafkaConfig.bootstrapServers],
+        ssl: true,
+        sasl: {
+          mechanism: 'plain',
+          username: kafkaConfig.apiKey,
+          password: kafkaConfig.apiSecret,
+        },
+        logLevel: logLevel.ERROR,
+        connectionTimeout: 10000,
+        requestTimeout: 30000,
+      });
+
+      const producer = kafka.producer();
+      await producer.connect();
+
+      // Prepare messages for Kafka
+      const kafkaMessages = messages.map((msg: { key?: string; value: unknown }) => ({
+        key: msg.key || null,
+        value: typeof msg.value === 'string' ? msg.value : JSON.stringify(msg.value),
+      }));
+
+      // Send messages to the topic
+      const result = await producer.send({
+        topic: topic.name,
+        messages: kafkaMessages,
+      });
+
+      await producer.disconnect();
+
+      // Format results
+      const results = result.flatMap(r => 
+        kafkaMessages.map((_, i) => ({
           messageId: `msg-${Date.now()}-${i}`,
-          partition: Math.floor(Math.random() * 3),
-          offset: 1000 + i,
+          partition: r.partition,
+          offset: String(Number(r.baseOffset) + i),
           timestamp: new Date().toISOString(),
-        });
-      }
+        }))
+      );
+
+      console.log(`Successfully sent ${messages.length} messages to Kafka topic: ${topic.name}`);
 
       res.json({
         success: true,

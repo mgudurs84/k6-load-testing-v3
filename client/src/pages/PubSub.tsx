@@ -76,7 +76,7 @@ interface SentMessageRecord {
   topicId: string;
   topicName: string;
   platform: Platform;
-  messages: { key?: string; preview: string }[];
+  messages: { key?: string; preview: string; fullContent: string }[];
   messageCount: number;
   sentAt: Date;
   status: 'success' | 'failed';
@@ -324,7 +324,8 @@ export default function PubSub() {
           platform: topic.platform,
           messages: messages.map(m => ({
             key: m.key,
-            preview: m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content,
+            preview: m.content.length > 100 ? m.content.slice(0, 100) + '...' : m.content,
+            fullContent: m.content,
           })),
           messageCount: messages.length,
           sentAt: new Date(),
@@ -352,7 +353,8 @@ export default function PubSub() {
           platform: topic.platform,
           messages: messages.map(m => ({
             key: m.key,
-            preview: m.content.length > 80 ? m.content.slice(0, 80) + '...' : m.content,
+            preview: m.content.length > 100 ? m.content.slice(0, 100) + '...' : m.content,
+            fullContent: m.content,
           })),
           messageCount: messages.length,
           sentAt: new Date(),
@@ -1118,23 +1120,36 @@ export default function PubSub() {
                             
                             {expandedRecord === record.id && (
                               <div className="border-t bg-muted/30 p-4">
-                                <div className="text-xs font-medium text-muted-foreground mb-2">
-                                  Message Previews
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-xs font-medium text-muted-foreground">
+                                    Full Message Content ({record.messages.length} message{record.messages.length !== 1 ? 's' : ''})
+                                  </div>
                                 </div>
-                                <div className="space-y-2 max-h-64 overflow-auto">
+                                <div className="space-y-3 max-h-96 overflow-auto">
                                   {record.messages.map((msg, idx) => (
                                     <div
                                       key={idx}
-                                      className="rounded-md bg-background border p-3"
+                                      className="rounded-lg bg-background border overflow-hidden"
                                     >
-                                      {msg.key && (
-                                        <div className="text-xs text-muted-foreground mb-1">
-                                          <span className="font-medium">Key:</span> {msg.key}
-                                        </div>
-                                      )}
-                                      <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
-                                        {msg.preview}
-                                      </pre>
+                                      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
+                                        <span className="text-xs font-medium">Message {idx + 1}</span>
+                                        {msg.key && (
+                                          <Badge variant="outline" className="text-xs">
+                                            Key: {msg.key}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <div className="p-3">
+                                        <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all max-h-64 overflow-auto">
+                                          {(() => {
+                                            try {
+                                              return JSON.stringify(JSON.parse(msg.fullContent), null, 2);
+                                            } catch {
+                                              return msg.fullContent;
+                                            }
+                                          })()}
+                                        </pre>
+                                      </div>
                                     </div>
                                   ))}
                                 </div>

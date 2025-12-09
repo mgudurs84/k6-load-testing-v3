@@ -86,12 +86,12 @@ export function Header() {
 
           <div className="flex items-center gap-2">
             <Avatar data-testid="avatar-user">
-              <AvatarImage src="" alt="Sarah Chen" />
+              <AvatarImage src="" alt="Murali Gudur" />
               <AvatarFallback className="bg-primary text-primary-foreground">
-                SC
+                MG
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium">Sarah Chen</span>
+            <span className="text-sm font-medium">Murali Gudur</span>
           </div>
         </div>
       </div>
